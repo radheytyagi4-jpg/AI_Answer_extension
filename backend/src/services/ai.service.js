@@ -102,10 +102,18 @@ export async function generateAnswer(input) {
       throw e;
     }
     const result = await requestOpenAI(prompt, openAIKey);
-    return { ...result, provider: "openai", model: process.env.OPENAI_MODEL || "gpt-5.4-mini", agent: { fallbackUsed: false, trace: [{ model: process.env.OPENAI_MODEL || "gpt-5.4-mini", status: "success" }] } };
+    const model = process.env.OPENAI_MODEL || "gpt-5.4-mini";
+    return { ...result, provider: "openai", model, agent: { fallbackUsed: false, trace: [{ model, status: "success" }] } };
   }
 
-  if (geminiKey) {
+  if (!geminiKey) {
+    if (requestedProvider === "gemini") {
+      const e = new Error("GEMINI_API_KEY is missing from backend/.env");
+      e.status = 503;
+      throw e;
+    }
+    trace.push({ model: primaryModel, status: "skipped", reason: "GEMINI_API_KEY is not configured" });
+  } else {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
         trace.push({ model: primaryModel, attempt, status: "running" });
@@ -130,13 +138,11 @@ export async function generateAnswer(input) {
       trace[trace.length - 1].reason = error.message;
       if (!capacityError(error) && error.status !== 404) throw error;
     }
-  } else {
-    trace.push({ model: primaryModel, status: "skipped", reason: "GEMINI_API_KEY is not configured" });
   }
 
-  if (openAIKey) {
+  if (requestedProvider === "auto" && openAIKey) {
+    const model = process.env.OPENAI_MODEL || "gpt-5.4-mini";
     try {
-      const model = process.env.OPENAI_MODEL || "gpt-5.4-mini";
       trace.push({ model, status: "running" });
       const result = await requestOpenAI(prompt, openAIKey);
       trace[trace.length - 1].status = "success";
@@ -148,7 +154,9 @@ export async function generateAnswer(input) {
     }
   }
 
-  const error = new Error("Gemini is overloaded and its fallback model did not respond. Add OPENAI_API_KEY to backend/.env to enable a second-provider fallback, or retry shortly.");
+  const error = new Error(requestedProvider === "gemini"
+    ? "Both Gemini models are unavailable. Please retry shortly."
+    : "Gemini is unavailable. Configure OPENAI_API_KEY in backend/.env to enable the second-provider fallback, or retry shortly.");
   error.status = 503;
   error.code = "ALL_MODELS_UNAVAILABLE";
   throw error;

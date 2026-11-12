@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "AnswerFlow AI",
+  "version": "1.0.0",
+  "description": "AI question assistant with user-reviewed answer suggestions.",
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "AnswerFlow AI"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:4000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "answerflow-ai",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "extension",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace backend\" \"npm run dev --workspace extension\"",
+    "dev:extension": "npm run dev --workspace extension",
+    "dev:backend": "npm run dev --workspace backend",
+    "build": "npm run build --workspace extension",
+    "start": "npm run start --workspace backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

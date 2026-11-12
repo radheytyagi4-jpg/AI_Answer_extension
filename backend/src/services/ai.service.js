@@ -17,7 +17,7 @@ Return ONLY valid JSON with keys "answer", "explanation", "confidence". For MCQ,
 async function callGemini(prompt) {
   const key=process.env.GEMINI_API_KEY;
   if(!key) { const e=new Error('GEMINI_API_KEY is missing. Add it to backend/.env and restart the backend.'); e.status=503; throw e; }
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`;
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(key)}`;
   const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(25000)});
   const data=await response.json().catch(()=>({}));
   if(!response.ok) {

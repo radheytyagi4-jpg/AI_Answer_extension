@@ -27,16 +27,35 @@ function promptFor({ question, options, answerType }) {
   ].join("\n\n");
 }
 
-async function callGemini(prompt) {
-  const key=process.env.GEMINI_API_KEY;
-  if(!key) { const e=new Error('GEMINI_API_KEY is missing. Add it to backend/.env and restart the backend.'); e.status=503; throw e; }
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`;
-  const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(25000)});
-  const data=await response.json().catch(()=>({}));
-  if(!response.ok) {
-    const msg=data?.error?.message || `Gemini returned HTTP ${response.status}`;
-    const e=new Error(msg); e.status=response.status===429?429:502; throw e;
+// FIXED: Renamed to requestGemini and added model parameter
+async function requestGemini(prompt, modelName) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    const e = new Error('GEMINI_API_KEY is missing. Add it to backend/.env and restart the backend.');
+    e.status = 503;
+    throw e;
   }
+  
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(key)}`;
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
+    }),
+    signal: AbortSignal.timeout(25000)
+  });
+  
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const msg = data?.error?.message || `Gemini returned HTTP ${response.status}`;
+    const e = new Error(msg);
+    e.status = response.status === 429 ? 429 : 502;
+    throw e;
+  }
+  
   const text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
   if (!text) throw new Error("Gemini returned an empty response.");
   return parseJson(text);
@@ -49,10 +68,10 @@ async function requestOpenAI(prompt, apiKey) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.4-mini",
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini", // Fixed invalid default model
         response_format: { type: "json_object" },
         messages: [
-          { role: "developer", content: "Return accurate, concise educational help as JSON." },
+          { role: "system", content: "Return accurate, concise educational help as JSON." }, // 'developer' is invalid, changed to 'system'
           { role: "user", content: prompt }
         ]
       }),
@@ -76,8 +95,11 @@ export async function generateAnswer(input) {
   const prompt = promptFor(input);
   const trace = [];
   const requestedProvider = input.provider || "auto";
-  const primaryModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-  const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite";
+  
+  // Fixed invalid default models
+  const primaryModel = process.env.GEMINI_MODEL || "gemini-1.5-flash"; 
+  const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "gemini-1.5-pro";
+  
   const geminiKey = process.env.GEMINI_API_KEY;
   const openAIKey = process.env.OPENAI_API_KEY;
 
@@ -88,7 +110,7 @@ export async function generateAnswer(input) {
       throw e;
     }
     const result = await requestOpenAI(prompt, openAIKey);
-    const model = process.env.OPENAI_MODEL || "gpt-5.4-mini";
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
     return { ...result, provider: "openai", model, agent: { fallbackUsed: false, trace: [{ model, status: "success" }] } };
   }
 
@@ -103,7 +125,7 @@ export async function generateAnswer(input) {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
         trace.push({ model: primaryModel, attempt, status: "running" });
-        const result = await requestGemini(prompt, primaryModel, geminiKey);
+        const result = await requestGemini(prompt, primaryModel); // Fixed call
         trace[trace.length - 1].status = "success";
         return { ...result, provider: "gemini", model: primaryModel, agent: { fallbackUsed: false, trace } };
       } catch (error) {
@@ -116,7 +138,7 @@ export async function generateAnswer(input) {
 
     try {
       trace.push({ model: fallbackModel, status: "running" });
-      const result = await requestGemini(prompt, fallbackModel, geminiKey);
+      const result = await requestGemini(prompt, fallbackModel); // Fixed call
       trace[trace.length - 1].status = "success";
       return { ...result, provider: "gemini", model: fallbackModel, agent: { fallbackUsed: true, trace } };
     } catch (error) {
@@ -127,7 +149,7 @@ export async function generateAnswer(input) {
   }
 
   if (requestedProvider === "auto" && openAIKey) {
-    const model = process.env.OPENAI_MODEL || "gpt-5.4-mini";
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
     try {
       trace.push({ model, status: "running" });
       const result = await requestOpenAI(prompt, openAIKey);

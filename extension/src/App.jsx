@@ -12,6 +12,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("Agent ready");
   const [error, setError] = useState("");
+  const [automation, setAutomation] = useState({ status: "idle", message: "Ready for an MCQ practice session.", completed: 0 });
 
   useEffect(() => {
     const storage = globalThis.chrome?.storage?.local;
@@ -88,7 +89,7 @@ export default function App() {
     }
   }
 
-  async function copyAnswer() {
+  useEffect(() => {\n    const runtime = globalThis.chrome?.runtime;\n    if (!runtime?.onMessage) return;\n    const listener = (message) => {\n      if (message?.type === "ANSWERFLOW_PROGRESS") setAutomation({ status: message.status, message: message.message, completed: message.completed || 0 });\n    };\n    runtime.onMessage.addListener(listener);\n    return () => runtime.onMessage.removeListener(listener);\n  }, []);\n\n  async function startAutomation() {\n    setError("");\n    const tabsApi = globalThis.chrome?.tabs;\n    const runtime = globalThis.chrome?.runtime;\n    if (!tabsApi || !runtime) { setError("Automation works in the installed Chrome extension, not the Vite preview."); return; }\n    try {\n      const [tab] = await tabsApi.query({ active: true, currentWindow: true });\n      if (!tab?.id) throw new Error("No active tab found.");\n      const result = await runtime.sendMessage({ type: "ANSWERFLOW_START", tabId: tab.id, provider, answerType: "mcq" });\n      if (!result?.ok) throw new Error(result?.error || "Could not start automation.");\n      setAutomation({ status: "running", message: "Agent started.", completed: 0 });\n    } catch (e) { setError(e.message || "Could not start automation."); }\n  }\n\n  async function stopAutomation() {\n    try { await globalThis.chrome?.runtime?.sendMessage({ type: "ANSWERFLOW_STOP" }); } catch {}\n    setAutomation((current) => ({ ...current, status: "paused", message: "Stop requested. The agent will stop after its current safe step." }));\n  }\n\n  async function copyAnswer() {
     if (!answer?.answer) return;
     await navigator.clipboard.writeText(answer.answer);
     setStatus("Answer copied");
@@ -123,7 +124,7 @@ export default function App() {
       </div>
     </section>
 
-    <button className="secondary" onClick={detect}><ScanText size={16} /> Read current question</button>
+    <button className="secondary" onClick={detect}><ScanText size={16} /> Read current question</button>\n\n    <section className="automation-box">\n      <div className="automation-heading"><Workflow size={16} /><strong>MCQ practice automation</strong></div>\n      <p>{automation.message}</p>\n      <small>Questions handled: {automation.completed}</small>\n      {automation.status === "running"\n        ? <button className="stop-button" onClick={stopAutomation}>Stop automation</button>\n        : <button className="primary" onClick={startAutomation}>Start MCQ agent</button>}\n      <small className="automation-note">Selects detected options and uses Next only. It never submits the quiz. Review the final page yourself.</small>\n    </section>
 
     <section className="question-box">
       <label>QUESTION</label>
@@ -147,6 +148,6 @@ export default function App() {
       <button className="secondary copy" onClick={copyAnswer}><Copy size={15} /> Copy answer</button>
     </section>}
 
-    <footer>Review suggestions carefully. You control page interactions and submission.</footer>
+    <footer>Review suggestions carefully. The agent stops at the final question; submission always stays manual.</footer>
   </main>;
 }

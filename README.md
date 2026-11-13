@@ -1,6 +1,6 @@
 # AnswerFlow AI
 
-React + Vite browser extension (Manifest V3) with a Node.js/Express AI backend and multi-model answer agent.
+React + Vite Chrome extension (Manifest V3) with a Node.js/Express backend and multi-model AI answer agent.
 
 ## Install
 
@@ -14,25 +14,17 @@ npm install
 
 Copy `backend/.env.example` to `backend/.env`.
 
-- `GEMINI_API_KEY`: required for the primary Gemini path.
+- `GEMINI_API_KEY`: required for Gemini.
 - `GEMINI_MODEL`: defaults to `gemini-3.8-flash`.
 - `GEMINI_FALLBACK_MODEL`: defaults to `gemini-3.5-flash-lite`.
 - `OPENAI_API_KEY`: optional second-provider fallback.
-- `OPENAI_MODEL`: defaults to `gpt-5.4-mini`.
+- `OPENAI_MODEL`: configurable OpenAI model (defaults to `gpt-5.4-mini`).
 
-API keys stay on the backend and are never bundled into the extension. Do not commit `backend/.env`.
+API keys stay on the backend and are never bundled into the extension. Never commit `backend/.env`.
 
-## Agent behavior
+## AI agent behavior
 
-When **Auto — recommended** is selected, the backend agent:
-
-1. Calls the configured primary Gemini model.
-2. Retries once after a short delay for temporary overload, rate-limit, or service errors.
-3. Switches to the configured Gemini fallback model.
-4. If both Gemini models remain unavailable, tries OpenAI when `OPENAI_API_KEY` is configured.
-5. Returns the model used and an activity trace to the extension UI.
-
-The UI shows whether a fallback was used. You can also select Gemini-only or OpenAI-only routing.
+Auto routing calls the primary Gemini model, retries temporary capacity/rate-limit failures, switches to the Gemini fallback model, and then tries OpenAI if configured. The API response includes the model used and an agent trace.
 
 ## Run locally
 
@@ -43,22 +35,25 @@ npm run dev
 Extension preview: http://localhost:5173  
 Backend: http://localhost:4000
 
-The web preview supports manually pasting a question. Page detection requires the installed extension.
+The web preview supports manually pasting a question. Page detection and page automation require the installed Chrome extension.
 
-## Load the browser extension
+## Load the extension
 
 ```bash
 npm run build
 ```
 
-Open `chrome://extensions` (or `edge://extensions`), enable Developer mode, click **Load unpacked**, and select `extension/dist`.
+Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `extension/dist`.
 
-## Workflow
+## MCQ practice workflow
 
-1. Open a page containing a question.
-2. Open AnswerFlow and choose **Read current question**.
-3. Review the detected question and options.
-4. Choose Auto Agent and an answer format.
-5. Review the suggested answer, explanation, confidence, and model activity.
+1. Open an MCQ practice page.
+2. Start the local backend and open AnswerFlow.
+3. Choose the model routing preference.
+4. Click **Start MCQ agent**.
+5. The extension reads a question and its options, requests an AI answer, selects the matching visible option, and clicks a clearly labelled Next control.
+6. Use **Stop automation** whenever you want to pause.
 
-The extension provides user-reviewed learning and practice suggestions. It does not automatically complete graded assessments, advance through questions, or submit forms.
+The workflow has a 100-question safety limit. It stops when it cannot confidently detect an MCQ or match an answer, or when no enabled Next control is found. It does not click Submit, Finish, or Complete. At the end, review your answers and submit manually if you choose.
+
+Page layouts differ. The current detector supports common radio/checkbox-based MCQ forms; custom quiz widgets may need site-specific selectors. Always supervise the automation and verify selected answers.

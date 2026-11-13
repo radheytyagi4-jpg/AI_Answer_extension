@@ -14,3 +14,11 @@ button{cursor:pointer;font:inherit}.primary,.secondary{width:100%;display:flex;j
 .answer{margin-top:12px;padding:13px;border:1px solid #3c6947;background:#17251a;border-radius:11px}.answer-head{display:flex;gap:7px;align-items:center;color:#9df0b1;font-size:12px}.answer-text{font-size:14px;line-height:1.5;color:#f2fff4;white-space:pre-wrap}.explanation{font-size:11px;line-height:1.55;color:#b2c2b5}.answer small{display:block;color:#92a596;margin-top:5px}.model-used{font-size:10px}.agent-trace{margin-top:12px;padding-top:10px;border-top:1px solid #314735;font-size:10px}.agent-trace>strong{display:block;color:#a6e8b3;margin-bottom:6px}.agent-trace div{display:flex;justify-content:space-between;gap:8px;padding:3px 0;color:#aab8ac}.agent-trace .success{color:#8be8a1}.agent-trace .failed{color:#ff9999}.agent-trace .running{color:#f0d48a}.agent-trace .skipped{color:#9ca89f}
 .copy{margin-bottom:0}.error{display:flex;gap:7px;align-items:flex-start;color:#ff9d9d;font-size:11px;line-height:1.5;margin:10px 0}
 footer{font-size:10px;line-height:1.5;color:#819087;margin-top:14px}.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+
+.automation-box{margin:12px 0;padding:12px;border:1px solid #426b4b;background:#17251a;border-radius:11px}
+.automation-heading{display:flex;align-items:center;gap:7px;color:#a5efb5;font-size:12px}
+.automation-box p{font-size:11px;line-height:1.5;color:#d1dfd3;margin:8px 0 4px}
+.automation-box small{display:block;font-size:10px;color:#9aaa9e;line-height:1.5}
+.automation-box .primary{margin:10px 0 7px}
+.stop-button{width:100%;margin:10px 0 7px;padding:10px;border:1px solid #9b5555;border-radius:8px;background:#462626;color:#ffdada;font-size:11px;font-weight:700}
+.automation-note{color:#d0b98a!important}

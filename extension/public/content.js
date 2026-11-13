@@ -1,5 +1,5 @@
 (() => {
-  const clean = (s) => (s || "").replace(/\\s+/g, " ").trim();
+  const clean = (s) => (s || "").replace(/\s+/g, " ").trim();
   const visible = (el) => {
     if (!el || !el.isConnected) return false;
     const r = el.getBoundingClientRect(), st = getComputedStyle(el);
@@ -18,7 +18,7 @@
         const label = el.labels?.[0] || el.closest("label");
         return clean(label?.innerText || el.getAttribute("aria-label") || el.parentElement?.innerText || "");
       }).filter(Boolean);
-      const lines = (root.innerText || "").split(/\\n+/).map(clean).filter(Boolean);
+      const lines = (root.innerText || "").split(/\n+/).map(clean).filter(Boolean);
       const optionSet = new Set(options);
       const questionLines = lines.filter((line) => ![...optionSet].some((o) => line === o || line.includes(o)));
       const question = questionLines.find((line) => line.length > 12 && line.length < 1200) || questionLines.slice(0, 3).join(" ");
@@ -26,14 +26,14 @@
       if (question && (!best || score > best.score)) best = { question, options: [...new Set(options)], score };
     }
     if (best) return { question: best.question, options: best.options.slice(0, 20) };
-    const text = (document.body?.innerText || "").split(/\\n+/).map(clean).filter(Boolean);
+    const text = (document.body?.innerText || "").split(/\n+/).map(clean).filter(Boolean);
     return { question: text.find((line) => line.length > 12 && line.length < 1200) || "", options: [] };
   }
 
   function findAnswerControl(answer, options) {
     const raw = clean(answer);
-    const letter = raw.match(/^\\s*([A-Z])(?:[.)\\s:-]|$)/i)?.[1]?.toUpperCase();
-    const answerText = raw.replace(/^\\s*[A-Z](?:[.)\\s:-]+)?/i, "").trim().toLowerCase();
+    const letter = raw.match(/^\s*([A-Z])(?:[.)\s:-]|$)/i)?.[1]?.toUpperCase();
+    const answerText = raw.replace(/^\s*[A-Z](?:[.)\s:-]+)?/i, "").trim().toLowerCase();
     const controls = [...document.querySelectorAll(optionSelector)].filter(visible);
     const candidates = controls.map((el) => {
       const label = el.labels?.[0] || el.closest("label");

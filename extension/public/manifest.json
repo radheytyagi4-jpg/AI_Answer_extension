@@ -1,12 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "AnswerFlow AI",
+  "name": "CHEETAH AI",
   "version": "1.0.0",
-  "description": "AI question assistant with user-reviewed answer suggestions.",
-  "action": {
-    "default_popup": "index.html",
-    "default_title": "AnswerFlow AI"
-  },
   "permissions": [
     "activeTab",
     "storage",
@@ -24,9 +19,7 @@
         "http://*/*",
         "https://*/*"
       ],
-      "js": [
-        "content.js"
-      ],
+      "js": ["content.js"],
       "run_at": "document_idle"
     }
   ]

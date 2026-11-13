@@ -1,71 +1,207 @@
+
 let stopRequested = false;
 let running = false;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const sendProgress = (tabId, payload) => chrome.runtime.sendMessage({ type: "ANSWERFLOW_PROGRESS", ...payload }).catch(() => {});
-const pageMessage = (tabId, message) => chrome.tabs.sendMessage(tabId, message);
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function runWorkflow({ tabId, provider = "auto", answerType = "mcq" }) {
-  if (running) throw new Error("An AnswerFlow run is already active.");
-  running = true;
-  stopRequested = false;
-  let completed = 0;
+function sendProgress(tabId, payload) {
+  chrome.runtime.sendMessage({
+    type: "ANSWERFLOW_PROGRESS",
+    ...payload
+  }).catch(() => {});
+}
+
+function pageMessage(tabId, message) {
+  return Promise.race([
+    chrome.tabs.sendMessage(tabId, message),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Page response timed out. Refresh the page.")), 5000)
+    )
+  ]);
+}
+
+async function askAI(question, options, provider, answerType) {
+  const controller = new AbortController();
+
+  const timeout = setTimeout(() => controller.abort(), 20000);
+
   try {
-    for (let index = 1; index <= 100; index += 1) {
-      if (stopRequested) { sendProgress(tabId, { status: "paused", message: "Stopped by you.", completed }); return; }
-      sendProgress(tabId, { status: "running", message: `Reading question ${index}…`, completed });
-      const detected = await pageMessage(tabId, { type: "ANSWERFLOW_DETECT" });
-      if (!detected?.question) {
-        sendProgress(tabId, { status: "stopped", message: "No question detected. Check the page and restart.", completed });
-        return;
-      }
-      if (!detected.options?.length) {
-        sendProgress(tabId, { status: "stopped", message: "No MCQ options detected. Stopped without changing the page.", completed });
-        return;
-      }
-      const response = await fetch("http://localhost:4000/api/ai/answer", {
+    const response = await fetch(
+      "http://localhost:4000/api/ai/answer",
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: detected.question, options: detected.options, answerType, provider })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || data.error || `AI request failed (${response.status})`);
-      if (stopRequested) { sendProgress(tabId, { status: "paused", message: "Stopped by you before selecting the answer.", completed }); return; }
-      const selected = await pageMessage(tabId, { type: "ANSWERFLOW_SELECT", answer: data.answer, options: detected.options });
-      if (!selected?.ok) {
-        sendProgress(tabId, { status: "stopped", message: `Could not safely match answer: ${selected?.reason || "unknown error"}`, completed });
-        return;
+        body: JSON.stringify({
+          question,
+          options,
+          provider,
+          answerType
+        }),
+        signal: controller.signal
       }
-      completed += 1;
-      sendProgress(tabId, { status: "running", message: `Selected option for question ${index}. Moving to Next…`, completed, answer: data.answer, explanation: data.explanation });
-      await sleep(500);
-      if (stopRequested) { sendProgress(tabId, { status: "paused", message: "Stopped by you. Current answer remains selected.", completed }); return; }
-      const next = await pageMessage(tabId, { type: "ANSWERFLOW_NEXT" });
-      if (!next?.ok) {
-        sendProgress(tabId, { status: "finished", message: "Reached the final question or no Next button was found. Review your answers and submit manually if ready.", completed });
-        return;
-      }
-      await sleep(900);
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.message || data.error || `AI error ${response.status}`);
     }
-    sendProgress(tabId, { status: "stopped", message: "Safety limit reached (100 questions). Review the page before continuing.", completed });
+
+    if (!data.answer) {
+      throw new Error("AI did not return an answer.");
+    }
+
+    return data;
   } catch (error) {
-    sendProgress(tabId, { status: "error", message: error.message || "Agent workflow failed.", completed });
+    if (error.name === "AbortError") {
+      throw new Error("AI request timed out after 20 seconds.");
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function runWorkflow({ tabId, provider = "auto", answerType = "mcq" }) {
+  if (running) throw new Error("Automation is already running.");
+
+  running = true;
+  stopRequested = false;
+
+  let completed = 0;
+
+  try {
+    for (let index = 1; index <= 100; index++) {
+      if (stopRequested) break;
+
+      sendProgress(tabId, {
+        status: "running",
+        message: `Detecting question ${index}...`,
+        completed
+      });
+
+      const detected = await pageMessage(tabId, {
+        type: "ANSWERFLOW_DETECT"
+      });
+
+      if (!detected?.question || detected.options?.length < 2) {
+        sendProgress(tabId, {
+          status: "stopped",
+          message: detected?.reason || "No valid MCQ detected.",
+          completed
+        });
+        return;
+      }
+
+      sendProgress(tabId, {
+        status: "running",
+        message: `Question ${index} detected. Asking AI...`,
+        completed
+      });
+
+      const data = await askAI(
+        detected.question,
+        detected.options,
+        provider,
+        answerType
+      );
+
+      if (stopRequested) break;
+
+      sendProgress(tabId, {
+        status: "running",
+        message: `AI answered question ${index}. Selecting option...`,
+        completed
+      });
+
+      const selected = await pageMessage(tabId, {
+        type: "ANSWERFLOW_SELECT",
+        answer: data.answer,
+        options: detected.options
+      });
+
+      if (!selected?.ok) {
+        sendProgress(tabId, {
+          status: "stopped",
+          message: selected?.reason || "Answer selection failed.",
+          completed
+        });
+        return;
+      }
+
+      completed++;
+
+      sendProgress(tabId, {
+        status: "running",
+        message: `Question ${index} answered. Checking Next button...`,
+        completed
+      });
+
+      await sleep(700);
+
+      if (stopRequested) break;
+
+      const next = await pageMessage(tabId, {
+        type: "ANSWERFLOW_NEXT"
+      });
+
+      if (!next?.ok) {
+        sendProgress(tabId, {
+          status: "finished",
+          message: "No Next button found. Review your answers manually.",
+          completed
+        });
+        return;
+      }
+
+      await sleep(1200);
+    }
+
+    sendProgress(tabId, {
+      status: "paused",
+      message: "Automation stopped. Review the current page.",
+      completed
+    });
+
+  } catch (error) {
+    sendProgress(tabId, {
+      status: "error",
+      message: error.message || "Automation failed.",
+      completed
+    });
   } finally {
     running = false;
     stopRequested = false;
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => console.info("AnswerFlow AI installed"));
+chrome.runtime.onInstalled.addListener(() => {
+  console.info("AnswerFlow AI installed");
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "ANSWERFLOW_START") {
-    const tabId = msg.tabId;
-    if (!Number.isInteger(tabId)) { sendResponse({ ok: false, error: "No active tab." }); return; }
-    runWorkflow({ tabId, provider: msg.provider, answerType: msg.answerType })
-      .catch((error) => sendProgress(tabId, { status: "error", message: error.message, completed: 0 }));
+    if (!Number.isInteger(msg.tabId)) {
+      sendResponse({ ok: false, error: "No active tab found." });
+      return;
+    }
+
+    if (running) {
+      sendResponse({ ok: false, error: "Automation is already running." });
+      return;
+    }
+
+    runWorkflow({
+      tabId: msg.tabId,
+      provider: msg.provider,
+      answerType: msg.answerType
+    });
+
     sendResponse({ ok: true });
     return;
   }
+
   if (msg?.type === "ANSWERFLOW_STOP") {
     stopRequested = true;
     sendResponse({ ok: true });

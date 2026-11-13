@@ -81,7 +81,7 @@ export default function App() {
           answer: `${data.answer}
 
 ${data.explanation || ""}`
-        }).catch(() => {});
+        }).catch(() => { });
       }
     } catch (e) {
       setError(e.message || "AI request failed.");
@@ -116,8 +116,16 @@ ${data.explanation || ""}`
   }
 
   async function stopAutomation() {
-    try { await globalThis.chrome?.runtime?.sendMessage({ type: "ANSWERFLOW_STOP" }); } catch {}
-    setAutomation((current) => ({ ...current, status: "paused", message: "Stop requested. The agent will stop after its current safe step." }));
+    try {
+      await globalThis.chrome?.runtime?.sendMessage({
+        type: "ANSWERFLOW_STOP"
+      });
+    } catch { }
+
+    setAutomation(current => ({
+      ...current,
+      message: "Stop requested. Waiting for the current step to finish..."
+    }));
   }
 
   async function copyAnswer() {

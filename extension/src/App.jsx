@@ -78,7 +78,9 @@ export default function App() {
         const [tab] = await tabsApi.query({ active: true, currentWindow: true });
         if (tab?.id) tabsApi.sendMessage(tab.id, {
           type: "ANSWERFLOW_SHOW_SUGGESTION",
-          answer: `${data.answer}\n\n${data.explanation || ""}`
+          answer: `${data.answer}
+
+${data.explanation || ""}`
         }).catch(() => {});
       }
     } catch (e) {
@@ -153,7 +155,17 @@ export default function App() {
       </div>
     </section>
 
-    <button className="secondary" onClick={detect}><ScanText size={16} /> Read current question</button>\n\n    <section className="automation-box">\n      <div className="automation-heading"><Workflow size={16} /><strong>MCQ practice automation</strong></div>\n      <p>{automation.message}</p>\n      <small>Questions handled: {automation.completed}</small>\n      {automation.status === "running"\n        ? <button className="stop-button" onClick={stopAutomation}>Stop automation</button>\n        : <button className="primary" onClick={startAutomation}>Start MCQ agent</button>}\n      <small className="automation-note">Selects detected options and uses Next only. It never submits the quiz. Review the final page yourself.</small>\n    </section>
+    <button className="secondary" onClick={detect}><ScanText size={16} /> Read current question</button>
+
+    <section className="automation-box">
+      <div className="automation-heading"><Workflow size={16} /><strong>MCQ practice automation</strong></div>
+      <p>{automation.message}</p>
+      <small>Questions handled: {automation.completed}</small>
+      {automation.status === "running"
+        ? <button className="stop-button" onClick={stopAutomation}>Stop automation</button>
+        : <button className="primary" onClick={startAutomation}>Start MCQ agent</button>}
+      <small className="automation-note">Selects detected options and uses Next only. It never submits the quiz. Review the final page yourself.</small>
+    </section>
 
     <section className="question-box">
       <label>QUESTION</label>

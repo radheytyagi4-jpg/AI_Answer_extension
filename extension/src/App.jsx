@@ -129,7 +129,7 @@ ${data.explanation || ""}`
   return <main className="app">
     <header className="header">
       <div className="brand-icon"><BrainCircuit size={22} /></div>
-      <div className="brand-copy"><strong>AnswerFlow AI</strong><span>Multi-model answer agent</span></div>
+      <div className="brand-copy"><strong>CHEETAH AI</strong><span>Multi-model answer agent</span></div>
       <Settings2 size={18} className="muted" />
     </header>
 

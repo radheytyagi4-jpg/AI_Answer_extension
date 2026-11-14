@@ -11,14 +11,49 @@ function sendProgress(tabId, payload) {
   }).catch(() => {});
 }
 
-function pageMessage(tabId, message) {
-  return Promise.race([
-    chrome.tabs.sendMessage(tabId, message),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Page response timed out. Refresh the page.")), 5000)
-    )
-  ]);
+
+async function pageMessage(tabId, message) {
+  const send = () =>
+    Promise.race([
+      chrome.tabs.sendMessage(tabId, message),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Page response timed out. Refresh the page.")),
+          5000
+        )
+      )
+    ]);
+
+  try {
+    return await send();
+  } catch (error) {
+    const connectionError =
+      /receiving end does not exist|could not establish connection/i.test(
+        error.message || ""
+      );
+
+    if (!connectionError) {
+      throw error;
+    }
+
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content.js"]
+      });
+
+      await sleep(300);
+
+      return await send();
+    } catch (injectionError) {
+      throw new Error(
+        "Could not load content.js into this tab. Open a normal website, refresh it, and try again. " +
+        (injectionError.message || "")
+      );
+    }
+  }
 }
+
 
 async function askAI(question, options, provider, answerType) {
   const controller = new AbortController();

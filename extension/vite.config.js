@@ -4,10 +4,10 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   plugins: [react()],
-  base: '',
+  base: './',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: { input: resolve(process.cwd(), 'index.html') }
+    rollupOptions: { input: resolve(__dirname, 'index.html')}
   }
 });

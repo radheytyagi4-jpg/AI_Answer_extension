@@ -2,12 +2,22 @@
 (() => {
   const clean = (s) => (s || "").replace(/\s+/g, " ").trim();
 
-  const visible = (el) => {
-    if (!el || !el.isConnected) return false;
-    const r = el.getBoundingClientRect();
-    const s = getComputedStyle(el);
+  const isShown = (node) => {
+    const r = node.getBoundingClientRect();
+    const s = getComputedStyle(node);
     return r.width > 0 && r.height > 0 &&
       s.display !== "none" && s.visibility !== "hidden";
+  };
+
+  const visible = (el) => {
+    if (!el || !el.isConnected) return false;
+    if (isShown(el)) return true;
+    // Styled quizzes often hide the real <input>; accept it if its label is visible.
+    if (el.tagName === "INPUT") {
+      const label = el.labels?.[0] || el.closest("label");
+      return !!label && isShown(label);
+    }
+    return false;
   };
 
   const selector =
@@ -98,7 +108,7 @@
 
         if (/^(next|previous|submit|finish|continue)\b/i.test(line)) return false;
 
-        return line.length >= 15 && line.length <= 1000;
+        return line.length >= 6 && line.length <= 1000;
       });
 
       const question = questionLines
@@ -109,7 +119,12 @@
       candidates.push({
         question,
         options,
-        score: unique.length * 10 + Math.min(question.length / 100, 5)
+        // Prefer unanswered questions, then the one nearest the top of the page.
+        score:
+          unique.length * 10 +
+          Math.min(question.length / 100, 5) -
+          (unique.some(c => c.checked || c.getAttribute("aria-checked") === "true") ? 1000 : 0) -
+          Math.max(0, root.getBoundingClientRect().top) / 10000
       });
     }
 
@@ -132,7 +147,8 @@
   function findAnswerControl(answer, options) {
     const raw = clean(answer);
 
-    const letter = raw.match(/^([A-H])(?:[.)\s:-]|$)/i)?.[1]?.toUpperCase();
+    // Only treat it as an option letter when followed by . ) : - (so "A triangle..." is not read as option A).
+    const letter = raw.match(/^(?:option\s+)?([A-H])(?:[.):-]|$)/i)?.[1]?.toUpperCase();
 
     const answerText = normalize(raw).toLowerCase();
 
@@ -194,7 +210,7 @@
     return elements.find(el => {
       const text = clean(
         el.innerText || el.value || el.getAttribute("aria-label") || ""
-      ).toLowerCase();
+      ).toLowerCase().replace(/[\s→›»>▶➔➜]+$/u, ""); // allow "Next →", "Next ›", "Next »"
 
       return /^(next|next question|continue|save\s*&\s*next)$/.test(text) &&
         !el.disabled &&
@@ -217,7 +233,27 @@
     return { ok: true };
   }
 
+  function showSuggestion(text) {
+    document.getElementById("answerflow-suggestion")?.remove();
+    const box = document.createElement("div");
+    box.id = "answerflow-suggestion";
+    box.style.cssText =
+      "position:fixed;right:16px;bottom:16px;z-index:2147483647;max-width:340px;padding:12px 14px;" +
+      "background:#17251a;color:#e8eee9;border:1px solid #3c6947;border-radius:10px;" +
+      "font:13px/1.5 system-ui,sans-serif;white-space:pre-wrap;box-shadow:0 6px 24px rgba(0,0,0,.35);cursor:pointer";
+    box.textContent = text.trim() + "\n\n(click to dismiss)";
+    box.addEventListener("click", () => box.remove());
+    document.body.appendChild(box);
+    setTimeout(() => box.remove(), 30000);
+  }
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg?.type === "ANSWERFLOW_SHOW_SUGGESTION") {
+      showSuggestion(String(msg.answer || ""));
+      sendResponse({ ok: true });
+      return;
+    }
+
     if (msg?.type === "ANSWERFLOW_DETECT") {
       sendResponse(detectQuestion());
       return;

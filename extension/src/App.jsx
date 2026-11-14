@@ -8,6 +8,19 @@ const API = "http://localhost:4000/api";
 const hasChrome = () => typeof chrome !== "undefined" && !!chrome.storage?.local;
 const hasTabs  = () => typeof chrome !== "undefined" && !!chrome.tabs;
 
+// Send a message to the page; if the content script isn't there yet (tab opened before
+// the extension was loaded/reloaded), inject it once and retry.
+async function sendToTab(tabId, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (e) {
+    if (!/receiving end does not exist|could not establish connection/i.test(e.message || "")) throw e;
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return chrome.tabs.sendMessage(tabId, message);
+  }
+}
+
 export default function App() {
   const [provider, setProvider] = useState("auto");
   const [answerType, setAnswerType] = useState("mcq");
@@ -44,8 +57,13 @@ export default function App() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) throw new Error("No active tab found.");
-      const data = await chrome.tabs.sendMessage(tab.id, { type: "ANSWERFLOW_DETECT" });
-      if (!data?.question) throw new Error("Could not detect a question. Try selecting the question text and retrying.");
+      const data = await sendToTab(tab.id, { type: "ANSWERFLOW_DETECT" });
+      if (!data?.question) {
+        throw new Error(
+          (data?.reason ? data.reason + " " : "") +
+          "This page needs clickable answer options (radio buttons or checkboxes). You can also paste the question below."
+        );
+      }
       setQuestion(data.question);
       setOptions(data.options || []);
       setStatus("Question detected");
@@ -86,14 +104,32 @@ export default function App() {
     }
   }
 
+  // Progress lives in chrome.storage.session (written by background.js), so it survives the
+  // popup closing (which Chrome does whenever you click the page) and shows again on reopen.
   useEffect(() => {
-    const runtime = globalThis.chrome?.runtime;
-    if (!runtime?.onMessage) return;
-    const listener = (message) => {
-      if (message?.type === "ANSWERFLOW_PROGRESS") setAutomation({ status: message.status, message: message.message, completed: message.completed || 0 });
+    const chromeApi = globalThis.chrome;
+    const session = chromeApi?.storage?.session;
+    if (!session || !chromeApi?.runtime) return;
+
+    const apply = (p) => {
+      if (p) setAutomation({ status: p.status, message: p.message, completed: p.completed || 0 });
     };
-    runtime.onMessage.addListener(listener);
-    return () => runtime.onMessage.removeListener(listener);
+
+    session.get("answerflowProgress").then(async (v) => {
+      let p = v.answerflowProgress;
+      if (p?.status === "running") {
+        // The background worker can be restarted by Chrome; make sure it is really still running.
+        const state = await chromeApi.runtime.sendMessage({ type: "ANSWERFLOW_STATUS" }).catch(() => null);
+        if (!state?.running) p = { status: "paused", message: "Agent is not running.", completed: p.completed };
+      }
+      apply(p);
+    }).catch(() => {});
+
+    const onChanged = (changes, area) => {
+      if (area === "session" && changes.answerflowProgress) apply(changes.answerflowProgress.newValue);
+    };
+    chromeApi.storage.onChanged.addListener(onChanged);
+    return () => chromeApi.storage.onChanged.removeListener(onChanged);
   }, []);
 
   async function startAutomation() {
@@ -177,7 +213,7 @@ export default function App() {
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Detected question will appear here. You can edit it."
-          rows={4}
+          rows={3}
         />
         {options.length > 0 && (
           <div className="options">
@@ -203,6 +239,22 @@ export default function App() {
           <button className="secondary copy" onClick={copyAnswer}><Copy size={15} /> Copy answer</button>
         </section>
       )}
+
+    <section className="field automation">
+      <label>MCQ AUTOMATION</label>
+      <div className={`status ${automation.status}`}>
+        <span className="dot" />
+        <span>{automation.message}{automation.completed > 0 ? ` (${automation.completed} answered)` : ""}</span>
+      </div>
+      <div className="row">
+        <button className="secondary" onClick={startAutomation} disabled={automation.status === "running"}>
+          <Workflow size={16} /> Start MCQ agent
+        </button>
+        <button className="secondary" onClick={stopAutomation} disabled={automation.status !== "running"}>
+          Stop
+        </button>
+      </div>
+    </section>
 
     <footer>Review suggestions carefully. You control page interactions and submission.</footer>
   </main>;

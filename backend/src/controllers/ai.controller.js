@@ -22,7 +22,8 @@ export async function answerQuestion(req, res) {
     return res.status(error.status || 502).json({
       error: "AI agent request failed",
       message: error.message || "Provider request failed",
-      code: error.code || "AGENT_ERROR"
+      code: error.code || "AGENT_ERROR",
+      trace: error.trace || []
     });
   }
 }

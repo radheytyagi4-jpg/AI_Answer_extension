@@ -5,10 +5,8 @@ let running = false;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function sendProgress(tabId, payload) {
-  chrome.runtime.sendMessage({
-    type: "ANSWERFLOW_PROGRESS",
-    ...payload
-  }).catch(() => {});
+  // Stored (not messaged) so the popup can show it even if it was closed and reopened.
+  chrome.storage.session.set({ answerflowProgress: payload }).catch(() => {});
 }
 
 
@@ -58,7 +56,8 @@ async function pageMessage(tabId, message) {
 async function askAI(question, options, provider, answerType) {
   const controller = new AbortController();
 
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  // The backend may retry and switch to a fallback model (up to ~75s), so wait longer than that.
+  const timeout = setTimeout(() => controller.abort(), 100000);
 
   try {
     const response = await fetch(
@@ -89,7 +88,7 @@ async function askAI(question, options, provider, answerType) {
     return data;
   } catch (error) {
     if (error.name === "AbortError") {
-      throw new Error("AI request timed out after 20 seconds.");
+      throw new Error("AI request timed out after 100 seconds.");
     }
 
     throw error;
@@ -105,6 +104,7 @@ async function runWorkflow({ tabId, provider = "auto", answerType = "mcq" }) {
   stopRequested = false;
 
   let completed = 0;
+  let lastKey = "";
 
   try {
     for (let index = 1; index <= 100; index++) {
@@ -128,6 +128,18 @@ async function runWorkflow({ tabId, provider = "auto", answerType = "mcq" }) {
         });
         return;
       }
+
+      // Stop if clicking Next did not move to a new question (avoids answering the same one repeatedly).
+      const key = detected.question + "|" + detected.options.join("|");
+      if (key === lastKey) {
+        sendProgress(tabId, {
+          status: "stopped",
+          message: "The question did not change after clicking Next. Review the page manually.",
+          completed
+        });
+        return;
+      }
+      lastKey = key;
 
       sendProgress(tabId, {
         status: "running",
@@ -234,6 +246,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
 
     sendResponse({ ok: true });
+    return;
+  }
+
+  if (msg?.type === "ANSWERFLOW_STATUS") {
+    sendResponse({ ok: true, running });
     return;
   }
 
